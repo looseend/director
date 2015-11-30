@@ -1,0 +1,11 @@
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/nav_header_layout"
+    android:layout_width="match_parent"
+    android:layout_height="@dimen/navHeaderHeight">
+    <TextView
+        android:text="Hello John"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        />
+    </LinearLayout>

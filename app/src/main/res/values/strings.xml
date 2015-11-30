@@ -1,0 +1,11 @@
+<resources>
+    <string name="app_name">Director</string>
+    <string name="title_activity_maps">Map</string>
+    <string name="location_permission_denied">Location Permission Denied</string>
+    <string name="permission_required_toast">Location Permission required</string>
+    <string name="permission_rationale_location">To show your location we need to access your location.</string>
+    <string name="drawer_open">Open navigation drawer</string>
+    <string name="drawer_close">Close navigation drawer</string>
+    <string name="dest">Destination</string>
+    <string name="navigate">Navigate</string>
+</resources>
