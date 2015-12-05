@@ -1,19 +1,23 @@
 package org.looseend.director;
 
 import android.Manifest;
-import android.app.ActionBar;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
+import android.content.res.Resources;
 import android.location.Location;
 import android.os.Bundle;
 import android.support.design.widget.NavigationView;
 import android.support.v4.content.ContextCompat;
 import android.support.v4.widget.DrawerLayout;
+import android.support.v7.app.ActionBar;
 import android.support.v7.app.ActionBarDrawerToggle;
 import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
 import android.view.MenuItem;
 import android.view.View;
+import android.widget.ImageView;
+import android.widget.RelativeLayout;
+import android.widget.TextView;
 
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.api.GoogleApiClient;
@@ -22,13 +26,13 @@ import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.SupportMapFragment;
+import com.google.android.gms.maps.model.CameraPosition;
 import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
 
 import butterknife.Bind;
 import butterknife.ButterKnife;
-import butterknife.OnLongClick;
 
 
 public class MapsActivity extends AppCompatActivity implements OnMapReadyCallback, GoogleApiClient.ConnectionCallbacks, GoogleApiClient.OnConnectionFailedListener, NavigationView.OnNavigationItemSelectedListener {
@@ -49,6 +53,12 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
     NavigationView navigationView;
     @Bind(R.id.drawer_layout)
     DrawerLayout drawerLayout;
+    @Bind(R.id.compass)
+    ImageView compass;
+    @Bind(R.id.distance)
+    TextView distance;
+    @Bind(R.id.navigator)
+    RelativeLayout navigator;
     private ActionBarDrawerToggle drawerToggle;
     private Marker destination;
 
@@ -96,7 +106,7 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         // Set the drawer toggle as the DrawerListener
         drawerLayout.setDrawerListener(drawerToggle);
 
-        ActionBar actionBar = getActionBar();
+        ActionBar actionBar = getSupportActionBar();
 
         if (actionBar != null) {
             actionBar.setDisplayHomeAsUpEnabled(true);
@@ -152,13 +162,11 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
                     destination.remove();
                 }
                 destination = mMap.addMarker(new MarkerOptions()
-                        .position(latLng)
-                        .title(getString(R.string.dest)));
+                    .position(latLng)
+                    .title(getString(R.string.dest)));
                 Log.d(TAG, "Long click, at" + latLng.toString());
             }
         });
-        Log.d(TAG, "Map ready");
-
     }
 
     /**
@@ -216,7 +224,52 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
             l.setLatitude(destination.getPosition().latitude);
             l.setLongitude(destination.getPosition().longitude);
             float bearingTo = lastLocation.bearingTo(l);
-            Log.d(TAG, "BearingTo " + bearingTo + "My bearing " + lastLocation.getBearing());
+
+            float ourBearing = lastLocation.getBearing();
+
+            float requiredBearing;
+            if(ourBearing > bearingTo) {
+                requiredBearing = 360.0f - (ourBearing - bearingTo);
+            } else {
+                requiredBearing = bearingTo - ourBearing;
+            }
+
+            float distanceTo = l.distanceTo(lastLocation);
+
+            Log.d(TAG, "BearingTo " + bearingTo + " My bearing " + ourBearing + " Required " + requiredBearing + " Distance " + distanceTo + "m");
+
+            if (requiredBearing > 0.0f && requiredBearing <= 45.0f ) {
+                compass.setImageResource(R.drawable.nne);
+            } else if (requiredBearing > 45.0f && requiredBearing <= 90.0f ) {
+                compass.setImageResource(R.drawable.ene);
+            } else if (requiredBearing > 90.0f && requiredBearing <= 135.0f ) {
+                compass.setImageResource(R.drawable.ese);
+            } else if (requiredBearing > 135.0f && requiredBearing <= 180.0f ) {
+                compass.setImageResource(R.drawable.sse);
+            } else if (requiredBearing > 180.0f && requiredBearing <= 225.0f ) {
+                compass.setImageResource(R.drawable.ssw);
+            } else if (requiredBearing > 225.0f && requiredBearing <= 270.0f ) {
+                compass.setImageResource(R.drawable.wsw);
+            } else if (requiredBearing > 270.0f && requiredBearing <= 315.0f ) {
+                compass.setImageResource(R.drawable.wnw);
+            } else if (requiredBearing > 315.0f && requiredBearing <= 360.0f ) {
+                compass.setImageResource(R.drawable.nnw);
+            }
+
+            Resources res = getResources();
+            if (distanceTo >= 1000) {
+                distance.setText(String.format(res.getString(R.string.distancekm), (distanceTo / 1000.0f)));
+            } else {
+                distance.setText(String.format(res.getString(R.string.distancm), distanceTo));
+            }
+
+            compass.setImageAlpha(127);
+            navigator.setVisibility(View.VISIBLE);
+
+            CameraPosition pos = new CameraPosition.Builder(mMap.getCameraPosition())
+                .bearing(ourBearing)
+                .build();
+            mMap.animateCamera(CameraUpdateFactory.newCameraPosition(pos));
 
         } else {
             Log.d(TAG, "Selected " + item.getTitle());

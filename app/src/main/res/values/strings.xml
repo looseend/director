@@ -8,4 +8,6 @@
     <string name="drawer_close">Close navigation drawer</string>
     <string name="dest">Destination</string>
     <string name="navigate">Navigate</string>
+    <string name="distancekm">%1$.2fkm</string>
+    <string name="distancm">%1$.0fm</string>
 </resources>
