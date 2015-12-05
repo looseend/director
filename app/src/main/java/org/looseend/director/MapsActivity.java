@@ -18,9 +18,12 @@ import android.view.View;
 import android.widget.ImageView;
 import android.widget.RelativeLayout;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.api.GoogleApiClient;
+import com.google.android.gms.location.LocationListener;
+import com.google.android.gms.location.LocationRequest;
 import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
@@ -45,7 +48,7 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
      * @see #onRequestPermissionsResult(int, String[], int[])
      */
     private static final int LOCATION_PERMISSION_REQUEST_CODE = 1;
-    private GoogleApiClient mGoogleApiClient;
+    private GoogleApiClient googleApiClient;
     private boolean connected;
 
 
@@ -70,14 +73,14 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         ButterKnife.bind(this);
         // Obtain the SupportMapFragment and get notified when the map is ready to be used.
         SupportMapFragment mapFragment = (SupportMapFragment) getSupportFragmentManager()
-                .findFragmentById(R.id.map);
+            .findFragmentById(R.id.map);
         mapFragment.getMapAsync(this);
-        mGoogleApiClient = new GoogleApiClient.Builder(this)
-                .addConnectionCallbacks(this)
-                .addOnConnectionFailedListener(this)
-                .addApi(LocationServices.API)
-                .build();
-        mGoogleApiClient.connect();
+        googleApiClient = new GoogleApiClient.Builder(this)
+            .addConnectionCallbacks(this)
+            .addOnConnectionFailedListener(this)
+            .addApi(LocationServices.API)
+            .build();
+        googleApiClient.connect();
         navigationView.setNavigationItemSelectedListener(this);
 
         setupActionBar();
@@ -86,10 +89,10 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
 
     private void setupActionBar() {
         drawerToggle = new ActionBarDrawerToggle(
-                this,                  /* host Activity */
-                drawerLayout,         /* DrawerLayout object */
-                R.string.drawer_open,  /* "open drawer" description */
-                R.string.drawer_close  /* "close drawer" description */
+            this,                  /* host Activity */
+            drawerLayout,         /* DrawerLayout object */
+            R.string.drawer_open,  /* "open drawer" description */
+            R.string.drawer_close  /* "close drawer" description */
         ) {
 
             /** Called when a drawer has settled in a completely closed state. */
@@ -174,10 +177,10 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
      */
     private void enableMyLocation() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
-                != PackageManager.PERMISSION_GRANTED) {
+            != PackageManager.PERMISSION_GRANTED) {
             // Permission to access the location is missing.
             PermissionUtils.requestPermission(this, LOCATION_PERMISSION_REQUEST_CODE,
-                    Manifest.permission.ACCESS_FINE_LOCATION, true);
+                Manifest.permission.ACCESS_FINE_LOCATION, true);
         } else if (mMap != null) {
             // Access to the location has been granted to the app.
             mMap.setMyLocationEnabled(true);
@@ -191,7 +194,7 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         Log.d(TAG, "Connected");
         if (mMap != null) {
             Location lastLocation = LocationServices.FusedLocationApi.getLastLocation(
-                    mGoogleApiClient);
+                googleApiClient);
             if (lastLocation != null) {
                 Log.d(TAG, "Moovin and Zoomin");
                 mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(new LatLng(lastLocation.getLatitude(), lastLocation.getLongitude()), 12.0f));
@@ -217,64 +220,92 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
 
     @Override
     public boolean onNavigationItemSelected(MenuItem item) {
-        if (item.getItemId() == R.id.action_nav) {
-            Location lastLocation = LocationServices.FusedLocationApi.getLastLocation(
-                    mGoogleApiClient);
-            Location l = new Location("");
-            l.setLatitude(destination.getPosition().latitude);
-            l.setLongitude(destination.getPosition().longitude);
-            float bearingTo = lastLocation.bearingTo(l);
+        if (connected) {
+            if (item.getItemId() == R.id.action_nav) {
 
-            float ourBearing = lastLocation.getBearing();
+                updateCompass();
 
-            float requiredBearing;
-            if(ourBearing > bearingTo) {
-                requiredBearing = 360.0f - (ourBearing - bearingTo);
+                startNavigating();
+
             } else {
-                requiredBearing = bearingTo - ourBearing;
+                Log.d(TAG, "Selected " + item.getTitle());
             }
-
-            float distanceTo = l.distanceTo(lastLocation);
-
-            Log.d(TAG, "BearingTo " + bearingTo + " My bearing " + ourBearing + " Required " + requiredBearing + " Distance " + distanceTo + "m");
-
-            if (requiredBearing > 0.0f && requiredBearing <= 45.0f ) {
-                compass.setImageResource(R.drawable.nne);
-            } else if (requiredBearing > 45.0f && requiredBearing <= 90.0f ) {
-                compass.setImageResource(R.drawable.ene);
-            } else if (requiredBearing > 90.0f && requiredBearing <= 135.0f ) {
-                compass.setImageResource(R.drawable.ese);
-            } else if (requiredBearing > 135.0f && requiredBearing <= 180.0f ) {
-                compass.setImageResource(R.drawable.sse);
-            } else if (requiredBearing > 180.0f && requiredBearing <= 225.0f ) {
-                compass.setImageResource(R.drawable.ssw);
-            } else if (requiredBearing > 225.0f && requiredBearing <= 270.0f ) {
-                compass.setImageResource(R.drawable.wsw);
-            } else if (requiredBearing > 270.0f && requiredBearing <= 315.0f ) {
-                compass.setImageResource(R.drawable.wnw);
-            } else if (requiredBearing > 315.0f && requiredBearing <= 360.0f ) {
-                compass.setImageResource(R.drawable.nnw);
-            }
-
-            Resources res = getResources();
-            if (distanceTo >= 1000) {
-                distance.setText(String.format(res.getString(R.string.distancekm), (distanceTo / 1000.0f)));
-            } else {
-                distance.setText(String.format(res.getString(R.string.distancm), distanceTo));
-            }
-
-            compass.setImageAlpha(127);
-            navigator.setVisibility(View.VISIBLE);
-
-            CameraPosition pos = new CameraPosition.Builder(mMap.getCameraPosition())
-                .bearing(ourBearing)
-                .build();
-            mMap.animateCamera(CameraUpdateFactory.newCameraPosition(pos));
-
         } else {
-            Log.d(TAG, "Selected " + item.getTitle());
+            Toast.makeText(this, "Location services not currently available", Toast.LENGTH_LONG).show();
         }
         drawerLayout.closeDrawers();
         return false;
     }
+
+    private void updateCompass() {
+        Location lastLocation = LocationServices.FusedLocationApi.getLastLocation(
+            googleApiClient);
+        Location l = new Location("");
+        l.setLatitude(destination.getPosition().latitude);
+        l.setLongitude(destination.getPosition().longitude);
+        float bearingTo = lastLocation.bearingTo(l);
+
+        float ourBearing = lastLocation.getBearing();
+
+        float requiredBearing;
+        if (ourBearing > bearingTo) {
+            requiredBearing = 360.0f - (ourBearing - bearingTo);
+        } else {
+            requiredBearing = bearingTo - ourBearing;
+        }
+
+        float distanceTo = l.distanceTo(lastLocation);
+
+        Log.d(TAG, "BearingTo " + bearingTo + " My bearing " + ourBearing + " Required " + requiredBearing + " Distance " + distanceTo + "m");
+
+        if (requiredBearing > 0.0f && requiredBearing <= 45.0f) {
+            compass.setImageResource(R.drawable.sa);
+        } else if (requiredBearing > 45.0f && requiredBearing <= 90.0f) {
+            compass.setImageResource(R.drawable.sa_med);
+        } else if (requiredBearing > 90.0f && requiredBearing <= 135.0f) {
+            compass.setImageResource(R.drawable.sa_bad);
+        } else if (requiredBearing > 135.0f && requiredBearing <= 180.0f) {
+            compass.setImageResource(R.drawable.sa_bad);
+        } else if (requiredBearing > 180.0f && requiredBearing <= 225.0f) {
+            compass.setImageResource(R.drawable.sa_bad);
+        } else if (requiredBearing > 225.0f && requiredBearing <= 270.0f) {
+            compass.setImageResource(R.drawable.sa_bad);
+        } else if (requiredBearing > 270.0f && requiredBearing <= 315.0f) {
+            compass.setImageResource(R.drawable.sa_med);
+        } else if (requiredBearing > 315.0f && requiredBearing <= 360.0f) {
+            compass.setImageResource(R.drawable.sa);
+        }
+
+        compass.setRotation(requiredBearing);
+
+        Resources res = getResources();
+        if (distanceTo >= 1000) {
+            distance.setText(String.format(res.getString(R.string.distancekm), (distanceTo / 1000.0f)));
+        } else {
+            distance.setText(String.format(res.getString(R.string.distancm), distanceTo));
+        }
+
+        compass.setImageAlpha(127);
+        navigator.setVisibility(View.VISIBLE);
+
+        CameraPosition pos = new CameraPosition.Builder(mMap.getCameraPosition())
+            .bearing(ourBearing)
+            .build();
+        mMap.animateCamera(CameraUpdateFactory.newCameraPosition(pos));
+    }
+
+    private void startNavigating() {
+        LocationRequest locationRequest = new LocationRequest();
+        locationRequest.setInterval(10000);
+        locationRequest.setFastestInterval(5000);
+        locationRequest.setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY);
+        LocationServices.FusedLocationApi.requestLocationUpdates(
+            googleApiClient, locationRequest, new LocationListener() {
+                @Override
+                public void onLocationChanged(Location location) {
+                    updateCompass();
+                }
+            });
+    }
+
 }
