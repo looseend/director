@@ -1,11 +1,15 @@
 package org.looseend.director;
 
 import android.Manifest;
+import android.app.SearchManager;
+import android.content.Context;
+import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.location.Location;
 import android.os.Bundle;
+import android.provider.ContactsContract;
 import android.support.design.widget.NavigationView;
 import android.support.v4.content.ContextCompat;
 import android.support.v4.widget.DrawerLayout;
@@ -13,10 +17,13 @@ import android.support.v7.app.ActionBar;
 import android.support.v7.app.ActionBarDrawerToggle;
 import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
+import android.view.Menu;
+import android.view.MenuInflater;
 import android.view.MenuItem;
 import android.view.View;
 import android.widget.ImageView;
 import android.widget.RelativeLayout;
+import android.widget.SearchView;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -33,6 +40,8 @@ import com.google.android.gms.maps.model.CameraPosition;
 import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
+import com.quinny898.library.persistentsearch.SearchBox;
+import com.quinny898.library.persistentsearch.SearchResult;
 
 import butterknife.Bind;
 import butterknife.ButterKnife;
@@ -62,6 +71,10 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
     TextView distance;
     @Bind(R.id.navigator)
     RelativeLayout navigator;
+
+    @Bind(R.id.searchbox)
+    SearchBox searchBox;
+
     private ActionBarDrawerToggle drawerToggle;
     private Marker destination;
 
@@ -73,26 +86,112 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         ButterKnife.bind(this);
         // Obtain the SupportMapFragment and get notified when the map is ready to be used.
         SupportMapFragment mapFragment = (SupportMapFragment) getSupportFragmentManager()
-            .findFragmentById(R.id.map);
+                .findFragmentById(R.id.map);
         mapFragment.getMapAsync(this);
         googleApiClient = new GoogleApiClient.Builder(this)
-            .addConnectionCallbacks(this)
-            .addOnConnectionFailedListener(this)
-            .addApi(LocationServices.API)
-            .build();
+                .addConnectionCallbacks(this)
+                .addOnConnectionFailedListener(this)
+                .addApi(LocationServices.API)
+                .build();
         googleApiClient.connect();
         navigationView.setNavigationItemSelectedListener(this);
 
         setupActionBar();
 
+        searchBox.setMenuListener(new SearchBox.MenuListener() {
+            @Override
+            public void onMenuClick() {
+                Log.d(TAG, "MENU");
+                if (drawerLayout.isDrawerOpen(navigationView)) {
+                    drawerLayout.closeDrawer(navigationView);
+                } else {
+                    drawerLayout.openDrawer(navigationView);
+                }
+            }
+        });
+
+        searchBox.setSearchListener(new SearchBox.SearchListener() {
+            @Override
+            public void onSearchOpened() {
+            }
+
+            @Override
+            public void onSearchCleared() {
+
+            }
+
+            @Override
+            public void onSearchClosed() {
+
+            }
+
+            @Override
+            public void onSearchTermChanged(String s) {
+
+            }
+
+            @Override
+            public void onSearch(String s) {
+                Log.d(TAG, "Searched");
+            }
+
+            @Override
+            public void onResultClick(SearchResult searchResult) {
+
+            }
+        });
+    }
+
+    @Override
+    public boolean onCreateOptionsMenu(Menu menu) {
+        MenuInflater inflater = getMenuInflater();
+        inflater.inflate(R.menu.options_menu, menu);
+        // Associate searchable configuration with the SearchView
+        SearchManager searchManager =
+                (SearchManager) getSystemService(Context.SEARCH_SERVICE);
+        SearchView searchView =
+                (SearchView) menu.findItem(R.id.search).getActionView();
+        searchView.setSearchableInfo(
+                searchManager.getSearchableInfo(getComponentName()));
+        searchView.setOnQueryTextListener(new SearchView.OnQueryTextListener() {
+
+            @Override
+            public boolean onQueryTextSubmit(String query) {
+                Log.d(TAG, "Query: " + query);
+                return false;
+            }
+
+            @Override
+            public boolean onQueryTextChange(String query) {
+
+                Log.d(TAG, "Query text change: " + query);
+
+                return true;
+
+            }
+
+        });
+
+        return true;
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        if (ContactsContract.Intents.SEARCH_SUGGESTION_CLICKED.equals(intent.getAction())) {
+            Toast.makeText(this, "Suggested: " + intent.getData(), Toast.LENGTH_LONG).show();
+        } else if (Intent.ACTION_SEARCH.equals(intent.getAction())) {
+            String query = intent.getStringExtra(SearchManager.QUERY);
+            Toast.makeText(this, "Query: " + query, Toast.LENGTH_LONG).show();
+        }
     }
 
     private void setupActionBar() {
         drawerToggle = new ActionBarDrawerToggle(
-            this,                  /* host Activity */
-            drawerLayout,         /* DrawerLayout object */
-            R.string.drawer_open,  /* "open drawer" description */
-            R.string.drawer_close  /* "close drawer" description */
+                this,                  /* host Activity */
+                drawerLayout,         /* DrawerLayout object */
+                R.string.drawer_open,  /* "open drawer" description */
+                R.string.drawer_close  /* "close drawer" description */
         ) {
 
             /** Called when a drawer has settled in a completely closed state. */
@@ -165,8 +264,8 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
                     destination.remove();
                 }
                 destination = mMap.addMarker(new MarkerOptions()
-                    .position(latLng)
-                    .title(getString(R.string.dest)));
+                        .position(latLng)
+                        .title(getString(R.string.dest)));
                 Log.d(TAG, "Long click, at" + latLng.toString());
             }
         });
@@ -177,16 +276,21 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
      */
     private void enableMyLocation() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
-            != PackageManager.PERMISSION_GRANTED) {
+                != PackageManager.PERMISSION_GRANTED) {
             // Permission to access the location is missing.
             PermissionUtils.requestPermission(this, LOCATION_PERMISSION_REQUEST_CODE,
-                Manifest.permission.ACCESS_FINE_LOCATION, true);
+                    Manifest.permission.ACCESS_FINE_LOCATION, true);
         } else if (mMap != null) {
             // Access to the location has been granted to the app.
             mMap.setMyLocationEnabled(true);
         }
     }
 
+    @Override
+    public void onActivityResult(int requestCode, int resultCode, Intent data) {
+        Log.d(TAG, "Result: " + resultCode + " Request " + requestCode);
+        super.onActivityResult(requestCode, resultCode, data);
+    }
 
     @Override
     public void onConnected(Bundle bundle) {
@@ -194,7 +298,7 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         Log.d(TAG, "Connected");
         if (mMap != null) {
             Location lastLocation = LocationServices.FusedLocationApi.getLastLocation(
-                googleApiClient);
+                    googleApiClient);
             if (lastLocation != null) {
                 Log.d(TAG, "Moovin and Zoomin");
                 mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(new LatLng(lastLocation.getLatitude(), lastLocation.getLongitude()), 12.0f));
@@ -222,11 +326,9 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
     public boolean onNavigationItemSelected(MenuItem item) {
         if (connected) {
             if (item.getItemId() == R.id.action_nav) {
-
-                updateCompass();
-
-                startNavigating();
-
+                if (destination != null) {
+                    startNavigating();
+                }
             } else {
                 Log.d(TAG, "Selected " + item.getTitle());
             }
@@ -239,7 +341,7 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
 
     private void updateCompass() {
         Location lastLocation = LocationServices.FusedLocationApi.getLastLocation(
-            googleApiClient);
+                googleApiClient);
         Location l = new Location("");
         l.setLatitude(destination.getPosition().latitude);
         l.setLongitude(destination.getPosition().longitude);
@@ -289,8 +391,8 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         navigator.setVisibility(View.VISIBLE);
 
         CameraPosition pos = new CameraPosition.Builder(mMap.getCameraPosition())
-            .bearing(ourBearing)
-            .build();
+                .bearing(ourBearing)
+                .build();
         mMap.animateCamera(CameraUpdateFactory.newCameraPosition(pos));
     }
 
@@ -300,12 +402,12 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         locationRequest.setFastestInterval(5000);
         locationRequest.setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY);
         LocationServices.FusedLocationApi.requestLocationUpdates(
-            googleApiClient, locationRequest, new LocationListener() {
-                @Override
-                public void onLocationChanged(Location location) {
-                    updateCompass();
-                }
-            });
+                googleApiClient, locationRequest, new LocationListener() {
+                    @Override
+                    public void onLocationChanged(Location location) {
+                        updateCompass();
+                    }
+                });
     }
 
 }

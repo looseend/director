@@ -10,4 +10,7 @@
     <string name="navigate">Navigate</string>
     <string name="distancekm">%1$.2fkm</string>
     <string name="distancm">%1$.0fm</string>
+    <string name="search_hint">Search locations</string>
+    <string name="search_title">Find destination</string>
+    <string name="search_result">result</string>
 </resources>
