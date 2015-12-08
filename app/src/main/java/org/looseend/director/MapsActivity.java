@@ -7,16 +7,18 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.content.res.Resources;
+import android.location.Address;
+import android.location.Geocoder;
 import android.location.Location;
 import android.os.Bundle;
 import android.provider.ContactsContract;
+import android.support.annotation.StringRes;
 import android.support.design.widget.NavigationView;
 import android.support.v4.content.ContextCompat;
 import android.support.v4.widget.DrawerLayout;
 import android.support.v7.app.ActionBar;
 import android.support.v7.app.ActionBarDrawerToggle;
 import android.support.v7.app.AppCompatActivity;
-import android.util.Log;
 import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
@@ -29,9 +31,13 @@ import android.widget.Toast;
 
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.api.GoogleApiClient;
+import com.google.android.gms.common.api.PendingResult;
 import com.google.android.gms.location.LocationListener;
 import com.google.android.gms.location.LocationRequest;
 import com.google.android.gms.location.LocationServices;
+import com.google.android.gms.location.places.AutocompleteFilter;
+import com.google.android.gms.location.places.PlaceTypes;
+import com.google.android.gms.location.places.Places;
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.OnMapReadyCallback;
@@ -43,8 +49,16 @@ import com.google.android.gms.maps.model.MarkerOptions;
 import com.quinny898.library.persistentsearch.SearchBox;
 import com.quinny898.library.persistentsearch.SearchResult;
 
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+import java.util.Locale;
+
 import butterknife.Bind;
 import butterknife.ButterKnife;
+import timber.log.Timber;
 
 
 public class MapsActivity extends AppCompatActivity implements OnMapReadyCallback, GoogleApiClient.ConnectionCallbacks, GoogleApiClient.OnConnectionFailedListener, NavigationView.OnNavigationItemSelectedListener {
@@ -101,7 +115,7 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         searchBox.setMenuListener(new SearchBox.MenuListener() {
             @Override
             public void onMenuClick() {
-                Log.d(TAG, "MENU");
+                Timber.d("MENU");
                 if (drawerLayout.isDrawerOpen(navigationView)) {
                     drawerLayout.closeDrawer(navigationView);
                 } else {
@@ -127,12 +141,14 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
 
             @Override
             public void onSearchTermChanged(String s) {
-
+                searchBox.showLoading(true);
+                Timber.d("Search term changed " + s);
+                doGeoSearch(s);
             }
 
             @Override
             public void onSearch(String s) {
-                Log.d(TAG, "Searched");
+                Timber.d("Searched");
             }
 
             @Override
@@ -140,6 +156,40 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
 
             }
         });
+    }
+
+    private void doGeoSearch(final String query) {
+        Runnable geoQueryWorker = new Runnable() {
+            @Override
+            public void run() {
+                Geocoder geoCoder = new Geocoder(MapsActivity.this, Locale.UK);
+                final ArrayList<SearchResult> results = new ArrayList<>();
+                try {
+                    List<Address> locations = geoCoder.getFromLocationName(query, 8);
+                    for (Address a : locations) {
+                        results.add(new SearchResult(a.getAddressLine(0)));
+                        Timber.d(a.toString());
+                    }
+                } catch (IOException e) {
+                    Timber.d("Looking up " + query + " :: " + e.getMessage());
+                }
+
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        searchBox.clearSearchable();
+                        searchBox.addAllSearchables(results);
+                        searchBox.updateResults();
+                        searchBox.showLoading(false);
+                        Timber.d("Updated search results");
+                    }
+                });
+
+            }
+        };
+
+        new Thread(geoQueryWorker).start();
+
     }
 
     @Override
@@ -157,14 +207,14 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
 
             @Override
             public boolean onQueryTextSubmit(String query) {
-                Log.d(TAG, "Query: " + query);
+                Timber.d("Query: " + query);
                 return false;
             }
 
             @Override
             public boolean onQueryTextChange(String query) {
 
-                Log.d(TAG, "Query text change: " + query);
+                Timber.d("Query text change: " + query);
 
                 return true;
 
@@ -266,7 +316,7 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
                 destination = mMap.addMarker(new MarkerOptions()
                         .position(latLng)
                         .title(getString(R.string.dest)));
-                Log.d(TAG, "Long click, at" + latLng.toString());
+                Timber.d("Long click, at" + latLng.toString());
             }
         });
     }
@@ -288,37 +338,37 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
 
     @Override
     public void onActivityResult(int requestCode, int resultCode, Intent data) {
-        Log.d(TAG, "Result: " + resultCode + " Request " + requestCode);
+        Timber.d("Result: " + resultCode + " Request " + requestCode);
         super.onActivityResult(requestCode, resultCode, data);
     }
 
     @Override
     public void onConnected(Bundle bundle) {
         connected = true;
-        Log.d(TAG, "Connected");
+        Timber.d("Connected");
         if (mMap != null) {
             Location lastLocation = LocationServices.FusedLocationApi.getLastLocation(
                     googleApiClient);
             if (lastLocation != null) {
-                Log.d(TAG, "Moovin and Zoomin");
+                Timber.d("Moovin and Zoomin");
                 mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(new LatLng(lastLocation.getLatitude(), lastLocation.getLongitude()), 12.0f));
             } else {
-                Log.d(TAG, "No Location");
+                Timber.d("No Location");
             }
         } else {
-            Log.d(TAG, "Map not created yet");
+            Timber.d("Map not created yet");
         }
     }
 
     @Override
     public void onConnectionSuspended(int i) {
-        Log.d(TAG, "Suspended");
+        Timber.d("Suspended");
         connected = false;
     }
 
     @Override
     public void onConnectionFailed(ConnectionResult connectionResult) {
-        Log.d(TAG, "Failed");
+        Timber.d("Failed");
         connected = false;
     }
 
@@ -330,7 +380,7 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
                     startNavigating();
                 }
             } else {
-                Log.d(TAG, "Selected " + item.getTitle());
+                Timber.d("Selected " + item.getTitle());
             }
         } else {
             Toast.makeText(this, "Location services not currently available", Toast.LENGTH_LONG).show();
@@ -358,7 +408,7 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
 
         float distanceTo = l.distanceTo(lastLocation);
 
-        Log.d(TAG, "BearingTo " + bearingTo + " My bearing " + ourBearing + " Required " + requiredBearing + " Distance " + distanceTo + "m");
+        Timber.d("BearingTo " + bearingTo + " My bearing " + ourBearing + " Required " + requiredBearing + " Distance " + distanceTo + "m");
 
         if (requiredBearing > 0.0f && requiredBearing <= 45.0f) {
             compass.setImageResource(R.drawable.sa);
