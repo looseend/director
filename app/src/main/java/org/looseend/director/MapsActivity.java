@@ -2,7 +2,6 @@ package org.looseend.director;
 
 import android.Manifest;
 import android.app.SearchManager;
-import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
@@ -16,22 +15,29 @@ import android.support.v4.widget.DrawerLayout;
 import android.support.v7.app.ActionBar;
 import android.support.v7.app.ActionBarDrawerToggle;
 import android.support.v7.app.AppCompatActivity;
-import android.util.Log;
+import android.text.Html;
 import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
 import android.view.View;
+import android.widget.AdapterView;
+import android.widget.AutoCompleteTextView;
 import android.widget.ImageView;
 import android.widget.RelativeLayout;
-import android.widget.SearchView;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.api.GoogleApiClient;
+import com.google.android.gms.common.api.PendingResult;
+import com.google.android.gms.common.api.ResultCallback;
 import com.google.android.gms.location.LocationListener;
 import com.google.android.gms.location.LocationRequest;
 import com.google.android.gms.location.LocationServices;
+import com.google.android.gms.location.places.AutocompletePrediction;
+import com.google.android.gms.location.places.Place;
+import com.google.android.gms.location.places.PlaceBuffer;
+import com.google.android.gms.location.places.Places;
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.OnMapReadyCallback;
@@ -40,16 +46,15 @@ import com.google.android.gms.maps.model.CameraPosition;
 import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
-import com.quinny898.library.persistentsearch.SearchBox;
-import com.quinny898.library.persistentsearch.SearchResult;
 
 import butterknife.Bind;
 import butterknife.ButterKnife;
+import butterknife.OnItemClick;
+import timber.log.Timber;
 
 
 public class MapsActivity extends AppCompatActivity implements OnMapReadyCallback, GoogleApiClient.ConnectionCallbacks, GoogleApiClient.OnConnectionFailedListener, NavigationView.OnNavigationItemSelectedListener {
 
-    private static final String TAG = MapsActivity.class.getSimpleName();
     private GoogleMap mMap;
     /**
      * Request code for location permission request.
@@ -72,11 +77,13 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
     @Bind(R.id.navigator)
     RelativeLayout navigator;
 
-    @Bind(R.id.searchbox)
-    SearchBox searchBox;
+    @Bind(R.id.autocomplete_places)
+    AutoCompleteTextView autoCompleteTextView;
 
     private ActionBarDrawerToggle drawerToggle;
     private Marker destination;
+    private PlaceAutocompleteAdapter adapter;
+    private boolean tracking = true;
 
 
     @Override
@@ -92,52 +99,52 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
                 .addConnectionCallbacks(this)
                 .addOnConnectionFailedListener(this)
                 .addApi(LocationServices.API)
+                .addApi(Places.GEO_DATA_API)
                 .build();
         googleApiClient.connect();
         navigationView.setNavigationItemSelectedListener(this);
 
-        setupActionBar();
-
-        searchBox.setMenuListener(new SearchBox.MenuListener() {
+        adapter = new PlaceAutocompleteAdapter(this, googleApiClient, null,
+                null);
+        autoCompleteTextView.setAdapter(adapter);
+        autoCompleteTextView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
             @Override
-            public void onMenuClick() {
-                Log.d(TAG, "MENU");
-                if (drawerLayout.isDrawerOpen(navigationView)) {
-                    drawerLayout.closeDrawer(navigationView);
-                } else {
-                    drawerLayout.openDrawer(navigationView);
-                }
+            public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
+                onPlaceClicked(parent, view, position, id);
             }
         });
+        setupActionBar();
 
-        searchBox.setSearchListener(new SearchBox.SearchListener() {
+    }
+
+    // No butterknife binding for this yet
+    public void onPlaceClicked(AdapterView<?> parent, View view, int position, long id) {
+        final AutocompletePrediction item = adapter.getItem(position);
+        final String placeId = item.getPlaceId();
+        final CharSequence primaryText = item.getPrimaryText(null);
+        Timber.d("Clicked %s", primaryText);
+        PendingResult<PlaceBuffer> placeResult = Places.GeoDataApi
+                .getPlaceById(googleApiClient, placeId);
+        placeResult.setResultCallback(new ResultCallback<PlaceBuffer>() {
             @Override
-            public void onSearchOpened() {
-            }
+            public void onResult(PlaceBuffer places) {
+                if (!places.getStatus().isSuccess()) {
+                    // Request did not complete successfully
+                    Timber.e("Place query did not complete. Error: " + places.getStatus().toString());
+                    places.release();
+                    return;
+                }
+                // Get the Place object from the buffer.
+                final Place place = places.get(0);
+                CameraPosition pos = new CameraPosition.Builder(mMap.getCameraPosition())
+                        .target(place.getLatLng())
+                        .build();
+                mMap.animateCamera(CameraUpdateFactory.newCameraPosition(pos));
+                destination = mMap.addMarker(new MarkerOptions()
+                        .position(place.getLatLng())
+                        .title(getString(R.string.dest)));
 
-            @Override
-            public void onSearchCleared() {
-
-            }
-
-            @Override
-            public void onSearchClosed() {
-
-            }
-
-            @Override
-            public void onSearchTermChanged(String s) {
-
-            }
-
-            @Override
-            public void onSearch(String s) {
-                Log.d(TAG, "Searched");
-            }
-
-            @Override
-            public void onResultClick(SearchResult searchResult) {
-
+                places.release();
             }
         });
     }
@@ -146,31 +153,6 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
     public boolean onCreateOptionsMenu(Menu menu) {
         MenuInflater inflater = getMenuInflater();
         inflater.inflate(R.menu.options_menu, menu);
-        // Associate searchable configuration with the SearchView
-        SearchManager searchManager =
-                (SearchManager) getSystemService(Context.SEARCH_SERVICE);
-        SearchView searchView =
-                (SearchView) menu.findItem(R.id.search).getActionView();
-        searchView.setSearchableInfo(
-                searchManager.getSearchableInfo(getComponentName()));
-        searchView.setOnQueryTextListener(new SearchView.OnQueryTextListener() {
-
-            @Override
-            public boolean onQueryTextSubmit(String query) {
-                Log.d(TAG, "Query: " + query);
-                return false;
-            }
-
-            @Override
-            public boolean onQueryTextChange(String query) {
-
-                Log.d(TAG, "Query text change: " + query);
-
-                return true;
-
-            }
-
-        });
 
         return true;
     }
@@ -266,7 +248,7 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
                 destination = mMap.addMarker(new MarkerOptions()
                         .position(latLng)
                         .title(getString(R.string.dest)));
-                Log.d(TAG, "Long click, at" + latLng.toString());
+                Timber.d("Long click, at" + latLng.toString());
             }
         });
     }
@@ -288,37 +270,37 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
 
     @Override
     public void onActivityResult(int requestCode, int resultCode, Intent data) {
-        Log.d(TAG, "Result: " + resultCode + " Request " + requestCode);
+        Timber.d("Result: " + resultCode + " Request " + requestCode);
         super.onActivityResult(requestCode, resultCode, data);
     }
 
     @Override
     public void onConnected(Bundle bundle) {
         connected = true;
-        Log.d(TAG, "Connected");
+        Timber.d("Connected");
         if (mMap != null) {
             Location lastLocation = LocationServices.FusedLocationApi.getLastLocation(
                     googleApiClient);
             if (lastLocation != null) {
-                Log.d(TAG, "Moovin and Zoomin");
+                Timber.d("Moovin and Zoomin");
                 mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(new LatLng(lastLocation.getLatitude(), lastLocation.getLongitude()), 12.0f));
             } else {
-                Log.d(TAG, "No Location");
+                Timber.d("No Location");
             }
         } else {
-            Log.d(TAG, "Map not created yet");
+            Timber.d("Map not created yet");
         }
     }
 
     @Override
     public void onConnectionSuspended(int i) {
-        Log.d(TAG, "Suspended");
+        Timber.d("Suspended");
         connected = false;
     }
 
     @Override
     public void onConnectionFailed(ConnectionResult connectionResult) {
-        Log.d(TAG, "Failed");
+        Timber.d("Failed");
         connected = false;
     }
 
@@ -327,10 +309,11 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         if (connected) {
             if (item.getItemId() == R.id.action_nav) {
                 if (destination != null) {
+                    tracking = true;
                     startNavigating();
                 }
             } else {
-                Log.d(TAG, "Selected " + item.getTitle());
+                Timber.d("Selected " + item.getTitle());
             }
         } else {
             Toast.makeText(this, "Location services not currently available", Toast.LENGTH_LONG).show();
@@ -358,7 +341,7 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
 
         float distanceTo = l.distanceTo(lastLocation);
 
-        Log.d(TAG, "BearingTo " + bearingTo + " My bearing " + ourBearing + " Required " + requiredBearing + " Distance " + distanceTo + "m");
+        Timber.d("BearingTo " + bearingTo + " My bearing " + ourBearing + " Required " + requiredBearing + " Distance " + distanceTo + "m");
 
         if (requiredBearing > 0.0f && requiredBearing <= 45.0f) {
             compass.setImageResource(R.drawable.sa);
@@ -389,10 +372,12 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
 
         compass.setImageAlpha(127);
         navigator.setVisibility(View.VISIBLE);
-
-        CameraPosition pos = new CameraPosition.Builder(mMap.getCameraPosition())
-                .bearing(ourBearing)
-                .build();
+        CameraPosition.Builder builder = new CameraPosition.Builder(mMap.getCameraPosition())
+                .bearing(ourBearing);
+        if (tracking) {
+            builder.target(new LatLng(lastLocation.getLatitude(), lastLocation.getLongitude()));
+        }
+        CameraPosition pos = builder.build();
         mMap.animateCamera(CameraUpdateFactory.newCameraPosition(pos));
     }
 
